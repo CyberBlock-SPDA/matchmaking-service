@@ -29,5 +29,24 @@ go.work.sum
 .env
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
+
+# Build artifacts
+/bin/
+
+# OS files
+.DS_Store
+
+# Local environment files
+.env.*
+!.env.example
+
+# Private signing keys
+*.key
+*.pem
+/keys/
+
+# Kubernetes credentials
+kubeconfig
+kubeconfig.yaml
