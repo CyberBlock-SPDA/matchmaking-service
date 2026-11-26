@@ -1,8 +1,15 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"sync/atomic"
+	"syscall"
+	"time"
 
 	"github.com/CyberBlock-SPDA/matchmaking-service/internal/allocator"
 	"github.com/CyberBlock-SPDA/matchmaking-service/internal/config"
@@ -55,6 +62,8 @@ func main() {
 
 	sessionHandler := handlers.NewSessionHandler(service)
 
+	var ready atomic.Bool
+
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -62,10 +71,36 @@ func main() {
 		w.Write([]byte("ok"))
 	})
 
+	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		if !ready.Load() {
+			http.Error(w, "not ready", http.StatusServiceUnavailable)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ready"))
+	})
+
 	mux.HandleFunc(
 		"/api/v1/sessions",
 		sessionHandler.CreateSession,
 	)
+
+	server := &http.Server{
+		Addr:              cfg.HTTPAddr,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      cfg.AllocationTimeout + 10*time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+
+	ctx, stop := signal.NotifyContext(
+		context.Background(),
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+	defer stop()
 
 	log.Printf("allocator mode: %s", cfg.AllocatorMode)
 
@@ -77,9 +112,45 @@ func main() {
 		)
 	}
 
-	log.Printf("HTTP server listening on %s", cfg.HTTPAddr)
+	serverErrors := make(chan error, 1)
 
-	if err := http.ListenAndServe(cfg.HTTPAddr, mux); err != nil {
-		log.Fatalf("HTTP server: %v", err)
+	ready.Store(true)
+
+	go func() {
+		log.Printf("HTTP server listening on %s", cfg.HTTPAddr)
+		serverErrors <- server.ListenAndServe()
+	}()
+
+	select {
+	case err := <-serverErrors:
+		ready.Store(false)
+
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("HTTP server: %v", err)
+		}
+
+	case <-ctx.Done():
+		ready.Store(false)
+		stop()
+
+		log.Println("shutdown signal received")
+
+		shutdownCtx, cancel := context.WithTimeout(
+			context.Background(),
+			cfg.AllocationTimeout+10*time.Second,
+		)
+		defer cancel()
+
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			log.Printf("graceful shutdown failed: %v", err)
+
+			if err := server.Close(); err != nil {
+				log.Printf("force close server: %v", err)
+			}
+
+			os.Exit(1)
+		}
+
+		log.Println("HTTP server stopped gracefully")
 	}
 }
