@@ -7,25 +7,27 @@ import (
 )
 
 type Config struct {
-	AllocatorMode     string
-	HTTPAddr          string
-	KubeconfigPath    string
-	GameNamespace     string
-	GameFleetName     string
-	AllocationTimeout time.Duration
-	JWTPrivateKeyPath string
-	TokenTTL          time.Duration
-	SessionTTL        time.Duration
+	AllocatorMode      string
+	HTTPAddr           string
+	KubeconfigPath     string
+	GameNamespace      string
+	GameFleetName      string
+	AllocationTimeout  time.Duration
+	JWTPrivateKeyPath  string
+	TokenTTL           time.Duration
+	SessionTTL         time.Duration
+	CORSAllowedOrigins string
 }
 
 func Load() (Config, error) {
 	cfg := Config{
-		AllocatorMode:     getEnv("ALLOCATOR_MODE", "mock"),
-		HTTPAddr:          getEnv("HTTP_ADDR", "127.0.0.1:8080"),
-		KubeconfigPath:    os.Getenv("KUBECONFIG"),
-		GameNamespace:     getEnv("GAME_NAMESPACE", "team-1"),
-		GameFleetName:     getEnv("GAME_FLEET_NAME", "doom-fleet"),
-		JWTPrivateKeyPath: getEnv("JWT_PRIVATE_KEY_PATH", "keys/private.pem"),
+		AllocatorMode:      getEnv("ALLOCATOR_MODE", "mock"),
+		HTTPAddr:           getEnv("HTTP_ADDR", "127.0.0.1:8080"),
+		KubeconfigPath:     os.Getenv("KUBECONFIG"),
+		GameNamespace:      getEnv("GAME_NAMESPACE", "team-1"),
+		GameFleetName:      getEnv("GAME_FLEET_NAME", "doom-fleet"),
+		JWTPrivateKeyPath:  getEnv("JWT_PRIVATE_KEY_PATH", "keys/private.pem"),
+		CORSAllowedOrigins: os.Getenv("CORS_ALLOWED_ORIGINS"),
 	}
 
 	if cfg.AllocatorMode != "mock" &&

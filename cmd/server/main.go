@@ -14,6 +14,7 @@ import (
 	"github.com/CyberBlock-SPDA/matchmaking-service/internal/allocator"
 	"github.com/CyberBlock-SPDA/matchmaking-service/internal/config"
 	"github.com/CyberBlock-SPDA/matchmaking-service/internal/http/handlers"
+	"github.com/CyberBlock-SPDA/matchmaking-service/internal/http/middleware"
 	"github.com/CyberBlock-SPDA/matchmaking-service/internal/kubernetes"
 	"github.com/CyberBlock-SPDA/matchmaking-service/internal/matchmaking"
 	"github.com/CyberBlock-SPDA/matchmaking-service/internal/token"
@@ -88,7 +89,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           mux,
+		Handler:           middleware.CORS(cfg.CORSAllowedOrigins, mux),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      cfg.AllocationTimeout + 10*time.Second,
