@@ -15,6 +15,8 @@ import (
 	"github.com/CyberBlock-SPDA/matchmaking-service/internal/models"
 )
 
+const sessionAnnotation = "cloudgaming.spda/session-id"
+
 var allocationGVR = schema.GroupVersionResource{
 	Group:    "allocation.agones.dev",
 	Version:  "v1",
@@ -45,12 +47,20 @@ func NewAgonesAllocator(
 func (a *AgonesAllocator) Allocate(
 	ctx context.Context,
 	gameID string,
+	sessionID string,
 ) (models.GameServer, error) {
 	if gameID != "doom-1993" {
 		return models.GameServer{}, fmt.Errorf(
 			"%w: unsupported game %q",
 			matchmaking.ErrAllocationFailed,
 			gameID,
+		)
+	}
+
+	if strings.TrimSpace(sessionID) == "" {
+		return models.GameServer{}, fmt.Errorf(
+			"%w: session ID is empty",
+			matchmaking.ErrAllocationFailed,
 		)
 	}
 
@@ -65,7 +75,7 @@ func (a *AgonesAllocator) Allocate(
 		)
 	}
 
-	allocation := a.buildAllocation()
+	allocation := a.buildAllocation(sessionID)
 
 	result, err := a.client.
 		Resource(allocationGVR).
@@ -83,7 +93,9 @@ func (a *AgonesAllocator) Allocate(
 	return parseAllocation(result)
 }
 
-func (a *AgonesAllocator) buildAllocation() *unstructured.Unstructured {
+func (a *AgonesAllocator) buildAllocation(
+	sessionID string,
+) *unstructured.Unstructured {
 	return &unstructured.Unstructured{
 		Object: map[string]any{
 			"apiVersion": "allocation.agones.dev/v1",
@@ -102,6 +114,11 @@ func (a *AgonesAllocator) buildAllocation() *unstructured.Unstructured {
 					},
 				},
 				"scheduling": "Packed",
+				"metadata": map[string]any{
+					"annotations": map[string]any{
+						sessionAnnotation: sessionID,
+					},
+				},
 			},
 		},
 	}

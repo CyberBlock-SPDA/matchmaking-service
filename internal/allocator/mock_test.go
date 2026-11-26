@@ -14,6 +14,7 @@ func TestMockAllocatorSuccess(t *testing.T) {
 	server, err := a.Allocate(
 		context.Background(),
 		"doom-1993",
+		"session-test-123",
 	)
 
 	if err != nil {
@@ -41,6 +42,7 @@ func TestMockAllocatorNoServers(t *testing.T) {
 	_, err := a.Allocate(
 		context.Background(),
 		"doom-1993",
+		"session-test-123",
 	)
 
 	if !errors.Is(err, matchmaking.ErrNoAvailableServers) {
@@ -54,7 +56,7 @@ func TestMockAllocatorCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := a.Allocate(ctx, "doom-1993")
+	_, err := a.Allocate(ctx, "doom-1993", "session-test-123")
 
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context.Canceled, got: %v", err)

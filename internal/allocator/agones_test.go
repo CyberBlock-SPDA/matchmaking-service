@@ -63,6 +63,7 @@ func TestAgonesAllocatorSuccess(t *testing.T) {
 	server, err := a.Allocate(
 		context.Background(),
 		"doom-1993",
+		"session-test-123",
 	)
 
 	if err != nil {
@@ -120,6 +121,14 @@ func TestAgonesAllocatorSuccess(t *testing.T) {
 	object, ok := createAction.GetObject().(*unstructured.Unstructured)
 	if !ok {
 		t.Fatal("expected unstructured object")
+	}
+
+	annotation, found, err := unstructured.NestedString(
+		object.Object, "spec", "metadata", "annotations", "cloudgaming.spda/session-id",
+	)
+	if err != nil || !found || annotation != "session-test-123" {
+		t.Fatalf("expected session annotation %q, got %q (found=%v, err=%v)",
+			"session-test-123", annotation, found, err)
 	}
 
 	selectors, found, err := unstructured.NestedSlice(
@@ -195,6 +204,7 @@ func TestAgonesAllocatorNoServers(t *testing.T) {
 			_, err := a.Allocate(
 				context.Background(),
 				"doom-1993",
+				"session-test-123",
 			)
 
 			if !errors.Is(err, matchmaking.ErrNoAvailableServers) {
@@ -229,6 +239,7 @@ func TestAgonesAllocatorAPIError(t *testing.T) {
 	_, err := a.Allocate(
 		context.Background(),
 		"doom-1993",
+		"session-test-123",
 	)
 
 	if !errors.Is(err, matchmaking.ErrAllocationFailed) {
@@ -323,6 +334,7 @@ func TestAgonesAllocatorUnsupportedGame(t *testing.T) {
 	_, err := a.Allocate(
 		context.Background(),
 		"unknown-game",
+		"session-test-123",
 	)
 
 	if !errors.Is(err, matchmaking.ErrAllocationFailed) {
@@ -349,7 +361,7 @@ func TestAgonesAllocatorCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := a.Allocate(ctx, "doom-1993")
+	_, err := a.Allocate(ctx, "doom-1993", "session-test-123")
 
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context.Canceled, got %v", err)
@@ -357,5 +369,28 @@ func TestAgonesAllocatorCanceled(t *testing.T) {
 
 	if len(client.Actions()) != 0 {
 		t.Fatal("canceled request must not trigger allocation")
+	}
+}
+
+func TestAgonesAllocatorEmptySessionID(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		id   string
+	}{
+		{name: "empty", id: ""},
+		{name: "whitespace", id: "   "},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := fake.NewSimpleDynamicClient(runtime.NewScheme())
+			a := NewAgonesAllocator(client, "team-1", "doom-fleet", 5*time.Second)
+
+			_, err := a.Allocate(context.Background(), "doom-1993", tc.id)
+			if !errors.Is(err, matchmaking.ErrAllocationFailed) {
+				t.Fatalf("expected ErrAllocationFailed, got %v", err)
+			}
+			if len(client.Actions()) != 0 {
+				t.Fatal("empty session ID must not trigger allocation")
+			}
+		})
 	}
 }

@@ -48,7 +48,7 @@ func (s *Service) CreateSession(
 		return models.CreateSessionResponse{}, err
 	}
 
-	server, err := s.allocator.Allocate(ctx, gameID)
+	server, err := s.allocator.Allocate(ctx, gameID, sessionID)
 	if err != nil {
 		return models.CreateSessionResponse{}, err
 	}

@@ -7,5 +7,9 @@ import (
 )
 
 type Allocator interface {
-	Allocate(ctx context.Context, gameID string) (models.GameServer, error)
+	Allocate(
+		ctx context.Context,
+		gameID string,
+		sessionID string,
+	) (models.GameServer, error)
 }

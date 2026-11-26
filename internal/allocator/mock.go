@@ -20,6 +20,7 @@ func NewMockAllocator(available bool) *MockAllocator {
 func (a *MockAllocator) Allocate(
 	ctx context.Context,
 	gameID string,
+	sessionID string,
 ) (models.GameServer, error) {
 	if err := ctx.Err(); err != nil {
 		return models.GameServer{}, err
