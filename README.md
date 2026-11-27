@@ -77,6 +77,7 @@ minimal Agones Role/RoleBinding are managed by
 | GET | `/healthz` | Liveness check |
 | GET | `/readyz` | Application readiness check |
 | POST | `/api/v1/sessions` | Create a game session |
+| GET | `/api/v1/ice-credentials` | Issue short-lived TURN REST credentials when TURN is configured |
 | POST | `/api/v1/admin/sessions/{sessionId}/terminate` | Terminate an allocated session (admin Bearer token required) |
 
 Create a session:
@@ -105,6 +106,15 @@ backend remains stateless: it reads the session annotation from the Agones
 GameServer rather than maintaining a registry. `MATCHMAKING_ADMIN_TOKEN` must
 be a long random value supplied through a Kubernetes Secret and is required
 when `ALLOCATOR_MODE=agones`.
+
+Configure TURN with `TURN_URLS` (comma-separated `turn:`/`turns:` URLs) and
+`TURN_SHARED_SECRET` (at least 32 bytes). When configured together, the
+`/api/v1/ice-credentials` endpoint returns coturn-compatible HMAC-SHA1
+credentials with an expiry embedded in the username. Credentials are
+short-lived and responses are marked `Cache-Control: no-store`; keep the
+shared secret in an external Kubernetes Secret, never in the frontend or
+ConfigMap. `TURN_CREDENTIAL_TTL` defaults to ten minutes and cannot exceed one
+hour.
 
 The API contract is maintained in [api-spec](https://github.com/CyberBlock-SPDA/api-spec).
 

@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -18,6 +19,9 @@ type Config struct {
 	TokenTTL           time.Duration
 	SessionTTL         time.Duration
 	CORSAllowedOrigins string
+	TURNURLs           []string
+	TURNSharedSecret   string
+	TURNCredentialTTL  time.Duration
 }
 
 func Load() (Config, error) {
@@ -30,6 +34,23 @@ func Load() (Config, error) {
 		AdminToken:         os.Getenv("MATCHMAKING_ADMIN_TOKEN"),
 		JWTPrivateKeyPath:  getEnv("JWT_PRIVATE_KEY_PATH", "keys/private.pem"),
 		CORSAllowedOrigins: os.Getenv("CORS_ALLOWED_ORIGINS"),
+		TURNSharedSecret:   os.Getenv("TURN_SHARED_SECRET"),
+	}
+	if urls := strings.TrimSpace(os.Getenv("TURN_URLS")); urls != "" {
+		for _, url := range strings.Split(urls, ",") {
+			url = strings.TrimSpace(url)
+			if url != "" {
+				cfg.TURNURLs = append(cfg.TURNURLs, url)
+			}
+		}
+	}
+
+	if len(cfg.TURNURLs) > 0 || cfg.TURNSharedSecret != "" {
+		if len(cfg.TURNURLs) == 0 || len(cfg.TURNSharedSecret) < 32 {
+			return Config{}, fmt.Errorf(
+				"TURN_URLS and a TURN_SHARED_SECRET of at least 32 bytes must be configured together",
+			)
+		}
 	}
 
 	if cfg.AllocatorMode != "mock" &&
@@ -63,6 +84,17 @@ func Load() (Config, error) {
 	cfg.SessionTTL, err = getDuration("SESSION_TTL", "10m")
 	if err != nil {
 		return Config{}, err
+	}
+	cfg.TURNCredentialTTL, err = getDuration(
+		"TURN_CREDENTIAL_TTL", "10m",
+	)
+	if err != nil {
+		return Config{}, err
+	}
+	if cfg.TURNCredentialTTL > time.Hour {
+		return Config{}, fmt.Errorf(
+			"TURN_CREDENTIAL_TTL must not exceed 1h",
+		)
 	}
 
 	if cfg.TokenTTL > cfg.SessionTTL {

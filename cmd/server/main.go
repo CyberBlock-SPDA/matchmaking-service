@@ -18,6 +18,7 @@ import (
 	"github.com/CyberBlock-SPDA/matchmaking-service/internal/kubernetes"
 	"github.com/CyberBlock-SPDA/matchmaking-service/internal/matchmaking"
 	"github.com/CyberBlock-SPDA/matchmaking-service/internal/token"
+	"github.com/CyberBlock-SPDA/matchmaking-service/internal/turncredentials"
 )
 
 func main() {
@@ -89,6 +90,20 @@ func main() {
 		"/api/v1/sessions",
 		sessionHandler.CreateSession,
 	)
+	if len(cfg.TURNURLs) > 0 {
+		turnService, err := turncredentials.New(
+			cfg.TURNURLs,
+			cfg.TURNSharedSecret,
+			cfg.TURNCredentialTTL,
+		)
+		if err != nil {
+			log.Fatalf("configure TURN credentials: %v", err)
+		}
+		mux.Handle(
+			"/api/v1/ice-credentials",
+			http.HandlerFunc(handlers.NewTURNHandler(turnService).GetCredentials),
+		)
+	}
 	if sessionTerminator != nil {
 		adminHandler := handlers.NewAdminHandler(
 			sessionTerminator,
