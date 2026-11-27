@@ -12,6 +12,7 @@ type Config struct {
 	KubeconfigPath     string
 	GameNamespace      string
 	GameFleetName      string
+	AdminToken         string
 	AllocationTimeout  time.Duration
 	JWTPrivateKeyPath  string
 	TokenTTL           time.Duration
@@ -26,6 +27,7 @@ func Load() (Config, error) {
 		KubeconfigPath:     os.Getenv("KUBECONFIG"),
 		GameNamespace:      getEnv("GAME_NAMESPACE", "team-1"),
 		GameFleetName:      getEnv("GAME_FLEET_NAME", "doom-fleet"),
+		AdminToken:         os.Getenv("MATCHMAKING_ADMIN_TOKEN"),
 		JWTPrivateKeyPath:  getEnv("JWT_PRIVATE_KEY_PATH", "keys/private.pem"),
 		CORSAllowedOrigins: os.Getenv("CORS_ALLOWED_ORIGINS"),
 	}
@@ -35,6 +37,12 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf(
 			"invalid ALLOCATOR_MODE: %q",
 			cfg.AllocatorMode,
+		)
+	}
+
+	if cfg.AllocatorMode == "agones" && len(cfg.AdminToken) < 32 {
+		return Config{}, fmt.Errorf(
+			"MATCHMAKING_ADMIN_TOKEN must contain at least 32 bytes when ALLOCATOR_MODE=agones",
 		)
 	}
 

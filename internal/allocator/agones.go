@@ -6,8 +6,10 @@ import (
 	"strings"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 
@@ -21,6 +23,12 @@ var allocationGVR = schema.GroupVersionResource{
 	Group:    "allocation.agones.dev",
 	Version:  "v1",
 	Resource: "gameserverallocations",
+}
+
+var gameServerGVR = schema.GroupVersionResource{
+	Group:    "agones.dev",
+	Version:  "v1",
+	Resource: "gameservers",
 }
 
 type AgonesAllocator struct {
@@ -91,6 +99,71 @@ func (a *AgonesAllocator) Allocate(
 	}
 
 	return parseAllocation(result)
+}
+
+func (a *AgonesAllocator) TerminateSession(
+	ctx context.Context,
+	sessionID string,
+) error {
+	if strings.TrimSpace(sessionID) == "" {
+		return matchmaking.ErrSessionNotFound
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, a.timeout)
+	defer cancel()
+
+	servers, err := a.client.
+		Resource(gameServerGVR).
+		Namespace(a.namespace).
+		List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("list Fleet GameServers: %w", err)
+	}
+
+	var matching *unstructured.Unstructured
+	for i := range servers.Items {
+		server := &servers.Items[i]
+		if server.GetLabels()["agones.dev/fleet"] != a.fleetName {
+			continue
+		}
+		if server.GetAnnotations()[sessionAnnotation] != sessionID {
+			continue
+		}
+		if matching != nil {
+			return fmt.Errorf(
+				"multiple GameServers found for session %q",
+				sessionID,
+			)
+		}
+		matching = server
+	}
+
+	if matching == nil {
+		return matchmaking.ErrSessionNotFound
+	}
+
+	state, found, err := unstructured.NestedString(
+		matching.Object, "status", "state",
+	)
+	if err != nil {
+		return fmt.Errorf("read GameServer state: %w", err)
+	}
+	if !found || state != "Allocated" {
+		return matchmaking.ErrSessionNotActive
+	}
+
+	err = a.client.
+		Resource(gameServerGVR).
+		Namespace(a.namespace).
+		Delete(ctx, matching.GetName(), metav1.DeleteOptions{})
+	if apierrors.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("delete allocated GameServer: %w", err)
+	}
+
+	return nil
 }
 
 func (a *AgonesAllocator) buildAllocation(
@@ -246,3 +319,4 @@ func findPort(ports []any, name string) (int, error) {
 }
 
 var _ matchmaking.Allocator = (*AgonesAllocator)(nil)
+var _ matchmaking.SessionTerminator = (*AgonesAllocator)(nil)

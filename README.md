@@ -40,7 +40,7 @@ go run ./cmd/server
 Run with Agones using a valid `KUBECONFIG`:
 
 ```sh
-env ALLOCATOR_MODE=agones go run ./cmd/server
+env ALLOCATOR_MODE=agones MATCHMAKING_ADMIN_TOKEN="$(openssl rand -hex 32)" go run ./cmd/server
 ```
 
 The server listens on `http://127.0.0.1:8080` by default.
@@ -54,6 +54,7 @@ The server listens on `http://127.0.0.1:8080` by default.
 | `KUBECONFIG` | Unset (in-cluster configuration) |
 | `GAME_NAMESPACE` | `team-1` |
 | `GAME_FLEET_NAME` | `doom-fleet` |
+| `MATCHMAKING_ADMIN_TOKEN` | Required when `ALLOCATOR_MODE=agones`; administrator Bearer secret |
 | `ALLOCATION_TIMEOUT` | `5s` |
 | `JWT_PRIVATE_KEY_PATH` | `keys/private.pem` |
 | `TOKEN_TTL` | `5m` |
@@ -62,7 +63,7 @@ The server listens on `http://127.0.0.1:8080` by default.
 
 For local frontend development, set `CORS_ALLOWED_ORIGINS=http://localhost:5173`. Multiple origins can be separated by commas.
 
-In Kubernetes, use `ALLOCATOR_MODE=agones`, `HTTP_ADDR=0.0.0.0:8080` and a private key mounted from a Secret. The ServiceAccount needs permission to create `gameserverallocations` in the game namespace. The Fleet must expose ports named `signaling` and `webrtc`.
+In Kubernetes, use `ALLOCATOR_MODE=agones`, `HTTP_ADDR=0.0.0.0:8080`, a private key mounted from a Secret, and `MATCHMAKING_ADMIN_TOKEN` from a separate Secret. The ServiceAccount needs permission to create `gameserverallocations` and list/delete GameServers in the game namespace. The Fleet must expose ports named `signaling` and `webrtc`.
 
 The repository Dockerfile builds a non-root static container. Production
 Deployment, ConfigMap, externally provisioned signing-key Secret and the
@@ -76,6 +77,7 @@ minimal Agones Role/RoleBinding are managed by
 | GET | `/healthz` | Liveness check |
 | GET | `/readyz` | Application readiness check |
 | POST | `/api/v1/sessions` | Create a game session |
+| POST | `/api/v1/admin/sessions/{sessionId}/terminate` | Terminate an allocated session (admin Bearer token required) |
 
 Create a session:
 
@@ -86,6 +88,23 @@ curl -X POST http://127.0.0.1:8080/api/v1/sessions \
 ```
 
 The service returns HTTP 201 with the session ID, game ID, server endpoints, session token and expiration timestamps. If no server is available, it returns HTTP 503 with `Retry-After`. Errors use Problem Details.
+
+Terminate a session using its returned `sessionId`:
+
+```sh
+curl --cacert university-root-ca.pem \
+  -X POST \
+  -H "Authorization: Bearer $(cat ~/.local/share/cyberblock-pki/matchmaking-admin-token)" \
+  "https://<traefik-lan-ip>/api/v1/admin/sessions/<session-id>/terminate"
+```
+
+The endpoint returns `202` when termination has been requested. Agones deletes
+the allocated GameServer and the Fleet replaces it. `404` means no GameServer
+is associated with the session; `409` means it is no longer allocated. The
+backend remains stateless: it reads the session annotation from the Agones
+GameServer rather than maintaining a registry. `MATCHMAKING_ADMIN_TOKEN` must
+be a long random value supplied through a Kubernetes Secret and is required
+when `ALLOCATOR_MODE=agones`.
 
 The API contract is maintained in [api-spec](https://github.com/CyberBlock-SPDA/api-spec).
 
@@ -104,6 +123,6 @@ Local integration tests with k3d and Agones verified successful allocation, serv
 
 - Only `doom-1993` is supported.
 - Session creation is not idempotent. Repeated client requests may allocate additional servers. Automatic allocation retries are prevented in the tested failure scenarios, but an uncertain allocation result may still leave an allocated server.
-- Game-streamer and Agones manage server shutdown and replacement. The backend does not maintain a session registry or enforce `expiresAt` as a hard session termination deadline.
+- Game-streamer and Agones manage normal server shutdown and replacement. The admin endpoint can terminate an allocated session, but the backend does not maintain a session registry or enforce `expiresAt` as a hard session termination deadline.
 - Readiness checks application state, not Agones API availability.
 - Full browser/WebRTC integration and cloud deployment remain to be verified.

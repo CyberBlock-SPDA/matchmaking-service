@@ -27,6 +27,7 @@ func main() {
 	}
 
 	var gameAllocator matchmaking.Allocator
+	var sessionTerminator matchmaking.SessionTerminator
 
 	switch cfg.AllocatorMode {
 	case "mock":
@@ -38,12 +39,14 @@ func main() {
 			log.Fatalf("create Kubernetes client: %v", err)
 		}
 
-		gameAllocator = allocator.NewAgonesAllocator(
+		agonesAllocator := allocator.NewAgonesAllocator(
 			client,
 			cfg.GameNamespace,
 			cfg.GameFleetName,
 			cfg.AllocationTimeout,
 		)
+		gameAllocator = agonesAllocator
+		sessionTerminator = agonesAllocator
 
 	default:
 		log.Fatalf("unsupported allocator mode: %s", cfg.AllocatorMode)
@@ -86,6 +89,16 @@ func main() {
 		"/api/v1/sessions",
 		sessionHandler.CreateSession,
 	)
+	if sessionTerminator != nil {
+		adminHandler := handlers.NewAdminHandler(
+			sessionTerminator,
+			cfg.AdminToken,
+		)
+		mux.Handle(
+			"POST /api/v1/admin/sessions/{sessionID}/terminate",
+			http.HandlerFunc(adminHandler.TerminateSession),
+		)
+	}
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,

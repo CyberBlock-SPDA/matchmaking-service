@@ -13,3 +13,7 @@ type Allocator interface {
 		sessionID string,
 	) (models.GameServer, error)
 }
+
+type SessionTerminator interface {
+	TerminateSession(ctx context.Context, sessionID string) error
+}
