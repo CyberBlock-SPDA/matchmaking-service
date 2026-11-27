@@ -64,6 +64,11 @@ For local frontend development, set `CORS_ALLOWED_ORIGINS=http://localhost:5173`
 
 In Kubernetes, use `ALLOCATOR_MODE=agones`, `HTTP_ADDR=0.0.0.0:8080` and a private key mounted from a Secret. The ServiceAccount needs permission to create `gameserverallocations` in the game namespace. The Fleet must expose ports named `signaling` and `webrtc`.
 
+The repository Dockerfile builds a non-root static container. Production
+Deployment, ConfigMap, externally provisioned signing-key Secret and the
+minimal Agones Role/RoleBinding are managed by
+[`k8s-apps-infrastructure`](https://github.com/CyberBlock-SPDA/k8s-apps-infrastructure).
+
 ## API
 
 | Method | Endpoint | Description |
